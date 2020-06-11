@@ -30,10 +30,19 @@ fn destroy_win(win: WINDOW) {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum Dest {
+    N,
+    S,
+    L,
+    O,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct Enemy {
     // line, col
     pos: (usize, usize),
     dmg: usize,
+    dest: Dest,
     hp: usize,
 }
 
@@ -42,12 +51,23 @@ impl Enemy {
         Self {
             pos: (rng.gen_range(2, 40), rng.gen_range(5, 50)),
             dmg: 2,
+            dest: Dest::O,
             hp: 20,
         }
     }
 }
 
 impl Enemy {
+    fn set_dest(&mut self, key: i32) {
+        match key {
+            KEY_LEFT => self.dest = Dest::L,
+            KEY_RIGHT => self.dest = Dest::O,
+            KEY_UP => self.dest = Dest::N,
+            KEY_DOWN => self.dest = Dest::S,
+            _ => {}
+        }
+    }
+
     fn generate_random_line(&mut self, mut rng: ThreadRng) -> Result<i32, Box<dyn Error>> {
         let minus_or_more = vec![-1, 1];
         let lin = if self.pos.0 as i32 + minus_or_more.choose(&mut rng).unwrap() < 0 {
@@ -76,23 +96,31 @@ impl Enemy {
 
     fn generate_random_position(&mut self, mut rng: ThreadRng) -> Result<(), Box<dyn Error>> {
         match rng.gen_range(0, 2) {
-            0 => self.pos = (self.generate_random_line(rng)? as usize, self.pos.1),
-            1 => self.pos = (self.pos.0, self.generate_random_column(rng)? as usize),
+            0 => {
+                let rnd_line = self.generate_random_line(rng)? as usize;
+                if rnd_line > self.pos.0 {
+                    self.set_dest(KEY_DOWN);
+                } else {
+                    self.set_dest(KEY_UP);
+                }
+                self.pos = (rnd_line, self.pos.1)
+            }
+            1 => {
+                let rnd_col = self.generate_random_column(rng)? as usize;
+                if rnd_col > self.pos.1 {
+                    self.set_dest(KEY_RIGHT);
+                } else {
+                    self.set_dest(KEY_LEFT);
+                }
+                self.pos = (self.pos.0, rnd_col)
+            }
             _ => {}
         };
         Ok(())
     }
 }
 
-#[derive(Debug)]
-enum Dest {
-    N,
-    S,
-    L,
-    O,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Player {
     // line, col
     pos: (usize, usize),
@@ -162,8 +190,8 @@ impl GameState {
         })
     }
 
-    fn draw_arm(&mut self, w: WINDOW) {
-        match self.player.dest {
+    fn draw_arm(&mut self, w: WINDOW, dest: Dest) {
+        match dest {
             Dest::N => mvwaddch(w, 0, COMPONENT_WIDTH / 2, '|' as chtype),
             Dest::S => mvwaddch(w, COMPONENT_HEIGHT - 1, COMPONENT_WIDTH / 2, '|' as chtype),
             Dest::L => mvwaddstr(w, COMPONENT_HEIGHT / 2, 0, "O"),
@@ -177,7 +205,11 @@ impl GameState {
             let w = draw_entity(x, y, false)?;
             // Serve para definir quem eh quem
             // mvwaddch(w, COMPONENT_HEIGHT / 2, COMPONENT_WIDTH / 2, 'P' as chtype);
-            self.draw_arm(w);
+            if win_id > 1 {
+                self.draw_arm(w, self.enemies[(win_id as usize) - 2].dest);
+            } else {
+                self.draw_arm(w, self.player.dest);
+            }
             wrefresh(w);
             self.entities.insert(win_id, w);
         }
@@ -207,7 +239,7 @@ impl GameState {
     }
 
     fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // let ten_millis = time::Duration::from_millis(10);
+        // let ten_millis = time::Duration::from_millis(300);
 
         loop {
             match getch() {
@@ -223,7 +255,7 @@ impl GameState {
             if !self.is_alive {
                 break;
             }
-            // thread::sleep(ten_millis);
+            //thread::sleep(ten_millis);
         }
         endwin();
         Ok(())
@@ -233,7 +265,7 @@ impl GameState {
 fn main() -> Result<(), Box<dyn Error>> {
     initscr();
     raw();
-    timeout(100);
+    timeout(500);
 
     // allow for extended keyboard
     keypad(stdscr(), true);
