@@ -2,6 +2,7 @@ use ncurses::*;
 use rand::prelude::*;
 use std::collections::HashMap;
 use std::error::Error;
+// use std::{thread, time};
 
 const COMPONENT_HEIGHT: i32 = 6;
 const COMPONENT_WIDTH: i32 = 12;
@@ -47,7 +48,7 @@ impl Enemy {
 }
 
 impl Enemy {
-    fn generate_random_position(&mut self, mut rng: ThreadRng) -> Result<(), Box<dyn Error>> {
+    fn generate_random_line(&mut self, mut rng: ThreadRng) -> Result<i32, Box<dyn Error>> {
         let minus_or_more = vec![-1, 1];
         let lin = if self.pos.0 as i32 + minus_or_more.choose(&mut rng).unwrap() < 0 {
             1
@@ -57,7 +58,11 @@ impl Enemy {
             let aux = minus_or_more.choose(&mut rng).unwrap();
             rng.gen_range(self.pos.0 as i32 + aux, self.pos.0 as i32 + (aux + 1))
         };
+        Ok(lin)
+    }
 
+    fn generate_random_column(&mut self, mut rng: ThreadRng) -> Result<i32, Box<dyn Error>> {
+        let minus_or_more = vec![-1, 1];
         let col = if self.pos.1 as i32 + minus_or_more.choose(&mut rng).unwrap() < 0 {
             1
         } else if self.pos.1 as i32 + minus_or_more.choose(&mut rng).unwrap() > WORLD_COL {
@@ -66,7 +71,15 @@ impl Enemy {
             let aux = minus_or_more.choose(&mut rng).unwrap();
             rng.gen_range(self.pos.1 as i32 + aux, self.pos.1 as i32 + (aux + 1))
         };
-        self.pos = (lin as usize, col as usize);
+        Ok(col)
+    }
+
+    fn generate_random_position(&mut self, mut rng: ThreadRng) -> Result<(), Box<dyn Error>> {
+        match rng.gen_range(0, 2) {
+            0 => self.pos = (self.generate_random_line(rng)? as usize, self.pos.1),
+            1 => self.pos = (self.pos.0, self.generate_random_column(rng)? as usize),
+            _ => {}
+        };
         Ok(())
     }
 }
@@ -194,6 +207,8 @@ impl GameState {
     }
 
     fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // let ten_millis = time::Duration::from_millis(10);
+
         loop {
             match getch() {
                 KEY_LEFT => self.player.move_position(KEY_LEFT),
@@ -208,6 +223,7 @@ impl GameState {
             if !self.is_alive {
                 break;
             }
+            // thread::sleep(ten_millis);
         }
         endwin();
         Ok(())
